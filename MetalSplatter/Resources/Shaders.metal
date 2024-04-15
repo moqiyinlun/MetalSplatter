@@ -176,4 +176,15 @@ fragment half4 splatFragmentShader(ColorInOut in [[stage_in]]) {
     half alpha = exp(negativeVSquared) * in.color.a;
     return half4(alpha * in.color.rgb, alpha);
 }
+kernel void srgbToLinearKernel(texture2d<float, access::read> inTexture [[ texture(0) ]],
+                                texture2d<float, access::write> outTexture [[ texture(1) ]],
+                                uint2 gid [[ thread_position_in_grid ]]) {
+    float4 color = inTexture.read(gid);
+    float3 linearColor;
+    linearColor.r = color.r <= 0.04045 ? color.r / 12.92 : pow((color.r + 0.055) / 1.055, 2.4);
+    linearColor.g = color.g <= 0.04045 ? color.g / 12.92 : pow((color.g + 0.055) / 1.055, 2.4);
+    linearColor.b = color.b <= 0.04045 ? color.b / 12.92 : pow((color.b + 0.055) / 1.055, 2.4);
+
+    outTexture.write(float4(linearColor, color.a), gid);
+}
 

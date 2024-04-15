@@ -123,6 +123,7 @@ public class SplatRenderer {
 
     private let library: MTLLibrary
     private var renderPipelineState: MTLRenderPipelineState?
+    public var computePipelineState: MTLComputePipelineState!
     private var depthState: MTLDepthStencilState?
 
     // dynamicUniformBuffers contains maxSimultaneousRenders uniforms buffers,
@@ -188,6 +189,17 @@ public class SplatRenderer {
         } catch {
             fatalError("Unable to initialize SplatRenderer: \(error)")
         }
+        do {
+            self.computePipelineState = try Self.buildComputePipelineWithDevice(device: device,
+                                                                          colorFormat: colorFormat,
+                                                                          depthFormat: depthFormat,
+                                                                          stencilFormat: stencilFormat,
+                                                                          sampleCount: sampleCount,
+                                                                          maxViewCount: self.maxViewCount)
+        } catch let error {
+            print("Failed to create compute pipeline state, error \(error)")
+        }
+
     }
 
     public func reset() {
@@ -216,7 +228,19 @@ public class SplatRenderer {
             depthState = try buildDepthState()
         }
     }
+    private class func buildComputePipelineWithDevice(device: MTLDevice,
+                                                      colorFormat: MTLPixelFormat,
+                                                      depthFormat: MTLPixelFormat,
+                                                      stencilFormat: MTLPixelFormat,
+                                                      sampleCount: Int,
+                                                      maxViewCount: Int) throws -> MTLComputePipelineState {
+        let library = try device.makeDefaultLibrary(bundle: Bundle.module)
+        guard let computeFunction = library.makeFunction(name: "srgbToLinearKernel") else {
+            fatalError("Unable to find srgbToLinearKernel in shader library.")
+        }
 
+        return try device.makeComputePipelineState(function: computeFunction)
+    }
     private func buildRenderPipeline() throws -> MTLRenderPipelineState {
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
 

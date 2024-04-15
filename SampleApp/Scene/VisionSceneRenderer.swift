@@ -162,7 +162,18 @@ class VisionSceneRenderer {
         updateRotation()
 
         let viewports = self.viewports(drawable: drawable, deviceAnchor: deviceAnchor)
-
+        let tempTextureDescriptor = MTLTextureDescriptor()
+        tempTextureDescriptor.textureType = .type2DArray 
+        tempTextureDescriptor.pixelFormat = drawable.colorTextures[0].pixelFormat
+        tempTextureDescriptor.width = drawable.colorTextures[0].width
+        tempTextureDescriptor.height = drawable.colorTextures[0].height
+        tempTextureDescriptor.arrayLength = 2 
+        tempTextureDescriptor.usage = [.shaderWrite, .shaderRead]  
+        tempTextureDescriptor.storageMode = .private  
+        tempTextureDescriptor.mipmapLevelCount = 1 
+        guard let tempTexture = device.makeTexture(descriptor: tempTextureDescriptor) else {
+            fatalError("Failed to create temporary texture array")
+        }
         modelRenderer?.render(viewports: viewports,
                               colorTexture: drawable.colorTextures[0],
                               colorStoreAction: .store,
@@ -171,7 +182,42 @@ class VisionSceneRenderer {
                               rasterizationRateMap: drawable.rasterizationRateMaps.first,
                               renderTargetArrayLength: layerRenderer.configuration.layout == .layered ? drawable.views.count : 1,
                               to: commandBuffer)
+        guard let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create compute command encoder")
+        }
+        guard let computePipelineState = computePipelineState else {
+            fatalError("computePipelineState is nil")
+        }
+        computeEncoder.setComputePipelineState(computePipelineState)
+        computeEncoder.setTexture(drawable.colorTextures[0], index: 0)
+        computeEncoder.setTexture(tempTexture, index: 1)
 
+        let width = computePipelineState.threadExecutionWidth
+        let height = computePipelineState.maxTotalThreadsPerThreadgroup / width
+        let threadsPerThreadgroup = MTLSize(width: width, height: height, depth: 1)
+        let threadgroupsPerGrid = MTLSize(width: (drawable.colorTextures[0].width + width - 1) / width,
+                                          height: (drawable.colorTextures[0].height + height - 1) / height,
+                                          depth: 1)
+
+        computeEncoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        computeEncoder.endEncoding()
+        guard let blitEncoder = commandBuffer.makeBlitCommandEncoder() else {
+            fatalError("Failed to create blit command encoder")
+        }
+
+        for layer in 0..<2 {
+            blitEncoder.copy(from: tempTexture,
+                                sourceSlice: layer,
+                                sourceLevel: 0,
+                                sourceOrigin: MTLOriginMake(0, 0, 0),
+                                sourceSize: MTLSizeMake(tempTexture.width, tempTexture.height, 1),
+                                to: drawable.colorTextures[0],
+                                destinationSlice: layer,
+                                destinationLevel: 0,
+                                destinationOrigin: MTLOriginMake(0, 0, 0))
+        }
+
+        blitEncoder.endEncoding()
         drawable.encodePresent(commandBuffer: commandBuffer)
 
         commandBuffer.commit()

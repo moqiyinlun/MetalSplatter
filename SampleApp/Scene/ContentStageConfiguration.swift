@@ -7,7 +7,8 @@ import SwiftUI
 struct ContentStageConfiguration: CompositorLayerConfiguration {
     func makeConfiguration(capabilities: LayerRenderer.Capabilities, configuration: inout LayerRenderer.Configuration) {
         configuration.depthFormat = .depth32Float
-        configuration.colorFormat = .bgra8Unorm_srgb
+        // configuration.colorFormat = .bgra8Unorm_srgb
+        configuration.colorFormat = .rgba16Unorm
 
         let foveationEnabled = capabilities.supportsFoveation
         configuration.isFoveationEnabled = foveationEnabled

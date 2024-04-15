@@ -72,6 +72,7 @@ public class SampleBoxRenderer {
 
     public let device: MTLDevice
     var pipelineState: MTLRenderPipelineState
+    var computePipelineState: MTLComputePipelineState!
     var depthState: MTLDepthStencilState
     var colorMap: MTLTexture
     public let maxViewCount: Int
@@ -114,6 +115,16 @@ public class SampleBoxRenderer {
         } catch {
             Self.log.error("Unable to compile render pipeline state. Error info: \(error)")
             throw error
+        }
+        do {
+            self.computePipelineState = try Self.buildComputePipelineWithDevice(device: device,
+                                                                          colorFormat: colorFormat,
+                                                                          depthFormat: depthFormat,
+                                                                          stencilFormat: stencilFormat,
+                                                                          sampleCount: sampleCount,
+                                                                          maxViewCount: self.maxViewCount)
+        } catch let error {
+            print("Failed to create compute pipeline state, error \(error)")
         }
 
         let depthStateDescriptor = MTLDepthStencilDescriptor()
@@ -306,7 +317,19 @@ public class SampleBoxRenderer {
 
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
+    private class func buildComputePipelineWithDevice(device: MTLDevice,
+                                                      colorFormat: MTLPixelFormat,
+                                                      depthFormat: MTLPixelFormat,
+                                                      stencilFormat: MTLPixelFormat,
+                                                      sampleCount: Int,
+                                                      maxViewCount: Int) throws -> MTLComputePipelineState {
+        let library = try device.makeDefaultLibrary(bundle: Bundle.module)
+        guard let computeFunction = library.makeFunction(name: "srgbToLinearKernel") else {
+            fatalError("Unable to find srgbToLinearKernel in shader library.")
+        }
 
+        return try device.makeComputePipelineState(function: computeFunction)
+    }
     private class func buildMesh(device: MTLDevice,
                                  mtlVertexDescriptor: MTLVertexDescriptor) throws -> MTKMesh {
         let metalAllocator = MTKMeshBufferAllocator(device: device)
